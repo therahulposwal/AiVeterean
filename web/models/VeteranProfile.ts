@@ -1,67 +1,42 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-// 1. Define the Interface (for TypeScript safety)
 export interface IVeteranProfile extends Document {
-  userId?: string;
   phoneNumber: string;
   password?: string;
   fullName?: string;
-  rank?: string;
-  arm?: string;
-  
-  // New Fields for Profile Builder
+  branch: string; // Army, Navy, Air Force
+  rank: string;
+  arm: string;    // Arm/Trade/Department
+  unitName: string; // Regiment / Squadron / Ship
+  isInterviewComplete: boolean; // ✅ Added to Interface
   interviewNotes: string[];
-  profileData?: {
-    workExperience: Array<{
-      role: string;
-      unit: string;
-      location: string;
-      startDate: string;
-      endDate: string;
-      responsibilities: string[];
-    }>;
-    technicalSkills: string[];
-    softSkills: string[];
-    courses: string[];
-    achievements: string[];
-  };
-  
+  lastSessionHandle?: string;
+  lastSessionTs?: Date;
+  profileData: any;
   createdAt: Date;
 }
 
-// 2. Define the Schema (Must match Relay Server exactly)
-const VeteranProfileSchema = new Schema<IVeteranProfile>({
-  userId: { type: String, index: true }, 
+const VeteranProfileSchema: Schema = new Schema({
   phoneNumber: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  
   fullName: String,
-  rank: String,
-  arm: String,
-
-  // --- RAW INPUT (The "Notebook") ---
-  interviewNotes: { type: [String], default: [] }, 
-
-  // --- STRUCTURED PROFILE (The "Database") ---
-  profileData: {
-    workExperience: [{
-      role: String,
-      unit: String,
-      location: String,
-      startDate: String,
-      endDate: String,
-      responsibilities: [String]
-    }],
-    technicalSkills: [String],
-    softSkills: [String],
-    courses: [String],
-    achievements: [String]
-  },
+  branch: { type: String, required: true, default: 'Army' },
+  rank: { type: String, required: true },
+  arm: { type: String, required: true },
+  unitName: { type: String, required: true }, // "9th Rajput", "INS Vikrant"
   
+  // ✅ Added to Schema
+  isInterviewComplete: { type: Boolean, default: false },
+
+  interviewNotes: [String], 
+  lastSessionHandle: { type: String },
+  lastSessionTs: { type: Date },
+  profileData: { type: Object, default: {} },
   createdAt: { type: Date, default: Date.now }
 });
 
-// 3. Export Model (with Next.js Hot-Reload fix)
-const VeteranProfile: Model<IVeteranProfile> = mongoose.models.VeteranProfile || mongoose.model<IVeteranProfile>('VeteranProfile', VeteranProfileSchema);
+const VeteranProfile: Model<IVeteranProfile> = 
+  mongoose.models.VeteranProfile || 
+  mongoose.model<IVeteranProfile>('VeteranProfile', VeteranProfileSchema);
 
 export default VeteranProfile;

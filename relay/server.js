@@ -5,23 +5,20 @@ const WebSocket = require('ws');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
-// Import the new modular handler
+// Import the Logic Core
 const { handleInterviewConnection } = require('./services/liveInterview');
 
 const app = express();
 app.use(cors());
 
-// --- DB CONNECTION ---
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ DB Error:', err));
 
-// --- SERVER SETUP ---
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// --- DELEGATE CONNECTION ---
-// Simpler, cleaner, and easier to debug
+// Delegate to handler
 wss.on('connection', (ws, req) => {
     handleInterviewConnection(ws, req);
 });

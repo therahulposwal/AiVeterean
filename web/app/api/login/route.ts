@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import dbConnect from '@/lib/mongodb';
+import dbConnect from '@/lib/dbConnect';
 import VeteranProfile from '@/models/VeteranProfile';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken'; // <--- Import JWT
@@ -31,15 +31,19 @@ export async function POST(req: Request) {
       { expiresIn: '1d' } // Token expires in 7 days
     );
 
-    return NextResponse.json({ 
-      success: true, 
-      token, // <--- Send Token to frontend
+    return NextResponse.json({
+      success: true,
+      token,
       user: {
         userId: user._id,
         fullName: user.fullName,
         rank: user.rank,
-        arm: user.arm
-      } 
+        arm: user.arm,
+        
+        // ✅ NEW FIELDS ADDED HERE
+        branch: user.branch,     
+        unitName: user.unitName  
+      }
     });
 
   } catch (error) {

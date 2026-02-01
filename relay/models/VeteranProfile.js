@@ -1,4 +1,3 @@
-// relay/models/VeteranProfile.js
 const mongoose = require('mongoose');
 
 const VeteranProfileSchema = new mongoose.Schema({
@@ -6,15 +5,18 @@ const VeteranProfileSchema = new mongoose.Schema({
   phoneNumber: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   fullName: String,
+  branch: { type: String, default: 'Army' },
   rank: String,
   arm: String,
+  unitName: String,
 
-  // --- 1. RAW INPUT (The "Notebook") ---
-  // The AI dumps raw facts here during the call
-  interviewNotes: [String], 
+  // ✅ NEW FIELD: default false, set to true ONLY on "Generate Profile"
+  isInterviewComplete: { type: Boolean, default: false },
 
-  // --- 2. STRUCTURED PROFILE (The "Database") ---
-  // Generated after the call by the Profile Architect
+  interviewNotes: [String],
+  lastSessionHandle: { type: String },
+  lastSessionTs: { type: Date }, 
+
   profileData: {
     workExperience: [{
       role: String,

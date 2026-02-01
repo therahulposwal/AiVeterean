@@ -1,17 +1,28 @@
+// relay/tools.js
+
+// Define the tool structure according to Gemini API specs
 const tools = [
   {
-    name: "log_fact",
-    description: "Log important user information for interview notes",
-    parameters: {
-      type: "OBJECT",
-      properties: {
-        fact: {
-          type: "STRING",
-          description: "Raw user statement"
+    functionDeclarations: [
+      {
+        name: "log_interview_fact",
+        description: "Log a key fact or extracted information from the user's interview answers.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            category: {
+              type: "STRING",
+              description: "The category of the fact (e.g., 'Experience', 'Leadership', 'Skills')."
+            },
+            fact: {
+              type: "STRING",
+              description: "The extracted fact or summary of what the user said."
+            }
+          },
+          required: ["category", "fact"]
         }
-      },
-      required: ["fact"]
-    }
+      }
+    ]
   }
 ];
 

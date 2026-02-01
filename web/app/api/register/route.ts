@@ -1,36 +1,45 @@
 import { NextResponse } from 'next/server';
-import dbConnect from '@/lib/mongodb';
+import dbConnect from '@/lib/dbConnect';
 import VeteranProfile from '@/models/VeteranProfile';
-import bcrypt from 'bcryptjs'; // <--- Import bcrypt
+import bcrypt from 'bcryptjs';
 
 export async function POST(req: Request) {
   try {
+    // ✅ Extract new fields
+    const { fullName, phoneNumber, password, branch, rank, arm, unitName } = await req.json();
+
     await dbConnect();
-    const body = await req.json();
-    const { fullName, phoneNumber, password, rank, arm } = body;
 
     const existingUser = await VeteranProfile.findOne({ phoneNumber });
     if (existingUser) {
-      return NextResponse.json({ success: false, error: 'User already exists.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Phone number already registered" }, { status: 400 });
     }
 
-    // --- SECURITY FIX: HASHING ---
-    // Generate a "salt" (random data) and hash the password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await VeteranProfile.create({
       fullName,
       phoneNumber,
-      password: hashedPassword, // <--- Save the HASH, not the real password
+      password: hashedPassword,
+      branch,    // ✅ Saved
       rank,
-      arm
+      arm,
+      unitName,  // ✅ Saved
+      
+      isInterviewComplete: false,
+      interviewNotes: [],
+      profileData: {}
     });
 
-    return NextResponse.json({ success: true, userId: user._id, rank: user.rank, arm: user.arm });
+    return NextResponse.json({ 
+      success: true, 
+      userId: user._id,
+      rank: user.rank,
+      arm: user.arm 
+    });
 
-  } catch (error) {
-    console.error('Registration Error:', error);
-    return NextResponse.json({ success: false, error: 'Registration failed' }, { status: 500 });
+  } catch (error: any) {
+    console.error("Registration Error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

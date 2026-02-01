@@ -1,20 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Nunito_Sans } from "next/font/google"; // ✅ Import Nunito Sans
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Configure the font
+const nunito = Nunito_Sans({ 
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["300", "400", "600", "700", "800"], // Load necessary weights
+  variable: "--font-nunito",
 });
 
 export const metadata: Metadata = {
-  title: "AiVeteran",
-  description: "Ai Veteran Helper",
+  title: "Veer AI | Veteran Profiler",
+  description: "Military to Civilian Transition Tool",
 };
 
 export default function RootLayout({
@@ -24,9 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${nunito.className} antialiased bg-stone-50 text-stone-900`}>
         {children}
       </body>
     </html>

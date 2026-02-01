@@ -1,78 +1,123 @@
 import { NextResponse } from 'next/server';
-import dbConnect from '@/lib/mongodb';
+import dbConnect from '@/lib/dbConnect';
 import VeteranProfile from '@/models/VeteranProfile';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Initialize Standard Gemini (Not Live)
+// Using the fast & stable model for text generation
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
 export async function POST(req: Request) {
   try {
-    await dbConnect();
     const { userId } = await req.json();
 
-    // 1. Get the Raw Notes
-    const user = await VeteranProfile.findById(userId);
-    if (!user || !user.interviewNotes || user.interviewNotes.length === 0) {
-      return NextResponse.json({ success: false, message: "No notes found to process." });
+    console.log("------------------------------------------------");
+    console.log("🕵️  PROFILE ARCHITECT: STARTING JOB");
+    console.log(`🔎  Looking for _id: "${userId}"`);
+
+    if (!userId) {
+      return NextResponse.json({ success: false, message: "User ID Missing" }, { status: 400 });
     }
 
-    const notes = user.interviewNotes.join("\n");
-    console.log("🏗️ Architecting Profile from notes:", notes);
+    await dbConnect();
+    const profile = await VeteranProfile.findById(userId);
 
-    // 2. Ask Gemini 1.5 Pro to Build the Profile
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    if (!profile) {
+      console.error("❌  Profile NOT FOUND in DB");
+      return NextResponse.json({ success: false, message: "Profile Not Found" }, { status: 404 });
+    }
+
+    const noteCount = profile.interviewNotes?.length || 0;
+    console.log(`✅  Profile Found. Notes Available: ${noteCount}`);
+
+    if (noteCount === 0) {
+      console.warn("⚠️  Interview Notes are Empty");
+      return NextResponse.json({ 
+        success: false, 
+        message: "No interview notes found. Please speak to the AI first." 
+      }, { status: 404 });
+    }
+
+    // 2. Prepare Data
+    console.log("📝  Compiling Transcript...");
+    const rawData = profile.interviewNotes.join("\n");
     
+    // ✅ INJECT NEW FIELDS INTO PROMPT
     const prompt = `
-      You are a Military Data Analyst.
-      Your goal is to build a structured "Veteran Profile" from raw interview notes.
+      You are an expert Military-to-Civilian Resume Architect.
       
-      RAW NOTES:
+      CANDIDATE PROFILE:
+      - Service Branch: ${profile.branch}      // ✅ NEW
+      - Rank: ${profile.rank}
+      - Arm/Trade: ${profile.arm}
+      - Last Unit/Base: ${profile.unitName}    // ✅ NEW
+      
+      SOURCE DATA (Raw Interview Notes):
       ---
-      ${notes}
+      ${rawData}
       ---
       
-      INSTRUCTIONS:
-      1. Analyze the notes to reconstruct the veteran's career timeline.
-      2. Group scattered facts into specific "Work Experience" entries.
-      3. Extract specific technical skills and soft skills.
-      4. Infer dates or durations if context is available (e.g., "served there for 2 years").
-
+      TASK:
+      Analyze the raw notes and extract a structured professional profile.
+      Infer logical dates, locations, or standard duties if they are implied but not explicitly stated.
+      
       OUTPUT FORMAT (Strict JSON):
+      You must return a JSON object matching this exact schema:
       {
         "workExperience": [
-          { 
-            "role": "string (e.g. Transport Supervisor)", 
-            "unit": "string (e.g. 510 ASC Bn)", 
-            "location": "string", 
-            "startDate": "string (YYYY)", 
-            "endDate": "string (YYYY)",
-            "responsibilities": ["string", "string"] 
+          {
+            "role": "Job Title (e.g. Platoon Commander)",
+            "unit": "Unit Name (e.g. 15 Rashtriya Rifles)",
+            "location": "City/Region (e.g. J&K)",
+            "startDate": "Year (e.g. 2015)",
+            "endDate": "Year (e.g. 2018)",
+            "responsibilities": ["Action verb bullet point 1", "Action verb bullet point 2"]
           }
         ],
-        "technicalSkills": ["string"],
-        "softSkills": ["string"],
-        "courses": ["string"],
-        "achievements": ["string"]
+        "technicalSkills": ["Skill 1", "Skill 2"],
+        "softSkills": ["Leadership", "Discipline"],
+        "courses": ["Course Name 1", "Course Name 2"],
+        "achievements": ["Award or Achievement 1"]
       }
+
+      Do NOT wrap the output in markdown code blocks. Return raw JSON only.
     `;
 
+    // 3. Generate Content
+    console.log("🤖  Calling Gemini 3 Flash...");
     const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    
-    // Clean JSON
-    const jsonString = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-    const profileData = JSON.parse(jsonString);
+    const response = await result.response;
+    let text = response.text();
 
-    // 3. Save Structured Profile to DB
-    await VeteranProfile.findByIdAndUpdate(userId, {
-      profileData: profileData
+    // 4. Sanitize
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    // 5. Parse & Save
+    let structuredData;
+    try {
+      structuredData = JSON.parse(text);
+      console.log("✨  JSON Parsed Successfully");
+    } catch (e) {
+      console.error("🔥  JSON Parse Error. Raw Output:", text);
+      return NextResponse.json({ success: false, message: "AI Generation Failed (Invalid JSON)" }, { status: 500 });
+    }
+
+    profile.profileData = structuredData;
+    profile.isInterviewComplete = true; // Mark as done
+    
+    await profile.save();
+    
+    console.log("💾  Saved Structured Data to MongoDB");
+    console.log("🎉  JOB COMPLETE");
+    console.log("------------------------------------------------");
+
+    return NextResponse.json({ 
+      success: true, 
+      data: structuredData 
     });
 
-    return NextResponse.json({ success: true, data: profileData });
-
-  } catch (error) {
-    console.error("Profile Build Error:", error);
-    return NextResponse.json({ success: false, error: 'Processing failed' }, { status: 500 });
+  } catch (error: any) {
+    console.error("🔥  FATAL ERROR:", error.message);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
