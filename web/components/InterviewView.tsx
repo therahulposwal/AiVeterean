@@ -9,14 +9,14 @@ import {
     Volume2, 
     Sparkles, 
     AlertTriangle, 
-    RefreshCw 
+    RefreshCw,
+    Loader2 // Added specific loader icon
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface InterviewViewProps {
   token: string | null;
   onFinish: () => void;
-  // userRank & userName removed from props as they are now fetched by backend
 }
 
 export default function InterviewView({ token, onFinish }: InterviewViewProps) {
@@ -24,6 +24,7 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
 
   // --- LOCAL STATE ---
   const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false); // ✅ NEW LOADING STATE
   const [isRecording, setIsRecording] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -52,40 +53,41 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
 
   // --- WEBSOCKET & AUDIO LOGIC ---
   const connectToRelay = async () => {
-    if (socketRef.current) return;
+    if (socketRef.current || isConnecting) return;
     
+    // ✅ START LOADING
+    setIsConnecting(true);
+    setErrorMessage(null);
+
     // 1. Token Cleanup & Validation
     let cleanToken = token;
     if (!cleanToken) {
-       // Fallback to localStorage if prop is null
        cleanToken = localStorage.getItem('veteran_token');
     }
 
     if (!cleanToken) {
         setErrorMessage("Authentication missing. Please log in.");
+        setIsConnecting(false); // Stop loading on error
         return;
     }
 
-    // Remove "Bearer " and extra quotes (Common Bug Fix)
     cleanToken = cleanToken.replace('Bearer ', '').replace(/^"|"$/g, '');
 
-    setErrorMessage(null);
-
     // 2. Initialize Audio Engine IMMEDIATELY (Bypasses Autoplay Block)
-    if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-    }
-    if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
+    try {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        }
+        if (audioContextRef.current.state === 'suspended') {
+            await audioContextRef.current.resume();
+        }
+    } catch (e) {
+        console.error("Audio Context Error", e);
     }
 
     // 3. Construct Secure URL
-    // Default to localhost for dev, but allow env var for production
     const RELAY_HOST = process.env.NEXT_PUBLIC_RELAY_HOST || 'localhost:8080';
-    // If on https, force wss (Secure WebSocket). If http, use ws.
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    
-    // ✅ PRODUCTION CHANGE: Send ONLY the token. Backend fetches User Profile.
     const wsUrl = `${protocol}://${RELAY_HOST}?token=${cleanToken}`;
 
     const ws = new WebSocket(wsUrl);
@@ -93,12 +95,14 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
     ws.onopen = () => {
       console.log("✅ Connected to Relay");
       setIsConnected(true);
+      setIsConnecting(false); // ✅ CONNECTION SUCCESS: STOP LOADING
+      
       // We set this initially to prevent recording until the "Hello" is finished
       setAiSpeaking(true); 
       isAiSpeakingRef.current = true; 
       startRecording(); 
 
-      // ✅ KEEPALIVE: Ping every 30s to prevent timeout on Render/Vercel
+      // Keep-Alive Ping
       pingIntervalRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: "ping" }));
@@ -109,15 +113,14 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
     ws.onclose = (event) => {
       console.log("❌ Connection Closed:", event.code, event.reason);
       setIsConnected(false);
+      setIsConnecting(false); // ✅ CONNECTION FAILED: STOP LOADING
       setIsRecording(false);
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       
-      // Handle Specific Auth Errors
       if (event.code === 1008) {
          alert("Session Expired or Invalid. Please log in again.");
          router.push('/login');
       } else if (event.code !== 1000) {
-         // Don't show error if closed normally (1000)
          setErrorMessage("Connection lost. Please retry.");
       }
       stopRecording();
@@ -128,7 +131,6 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
       try {
         const data = JSON.parse(event.data);
 
-        // ✅ RATE LIMIT HANDLING
         if (data.type === "SYSTEM_ERROR") {
            let msg = data.message;
            if (data.details && data.details.includes("429")) {
@@ -137,6 +139,7 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
            setErrorMessage(msg);
            stopRecording();
            setIsConnected(false);
+           setIsConnecting(false);
            if (socketRef.current) socketRef.current.close();
            return;
         }
@@ -188,13 +191,10 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
       source.start(nextStartTimeRef.current);
       nextStartTimeRef.current += buffer.duration;
       
-      // ✅ SIGNAL START: AI IS SPEAKING
       isAiSpeakingRef.current = true;
       setAiSpeaking(true);
       
       source.onended = () => {
-         // ✅ SIGNAL END: AI FINISHED SPEAKING
-         // We add a tiny buffer (100ms) to ensure echo is gone
          if (ctx.currentTime >= nextStartTimeRef.current - 0.1) {
             setTimeout(() => {
                 isAiSpeakingRef.current = false;
@@ -224,10 +224,6 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
       
       workletNode.port.onmessage = (event) => {
         if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
-
-        // ✅✅✅ THE FIX: THE GATE ✅✅✅
-        // If the AI is currently speaking, DO NOT send mic data.
-        // This prevents the AI from hearing itself (Echo) and interrupting itself.
         if (isAiSpeakingRef.current) return; 
 
         const base64Audio = btoa(new Uint8Array(event.data).reduce((data, byte) => data + String.fromCharCode(byte), ''));
@@ -274,7 +270,7 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
       </div>
 
       {/* Error Banner */}
-      {errorMessage && !isConnected && (
+      {errorMessage && !isConnected && !isConnecting && (
           <div className="w-full bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 animate-in slide-in-from-top-2">
               <AlertTriangle className="text-amber-500 shrink-0" size={24} />
               <div className="flex-1">
@@ -290,18 +286,31 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
       {/* Main Action Area */}
       <div className="relative w-full aspect-square max-w-[320px] flex items-center justify-center">
           
-          {/* 1. START BUTTON */}
+          {/* 1. START / LOADING BUTTON */}
           {!isConnected && !isProcessing && (
               <button 
                   onClick={connectToRelay}
-                  className="group relative w-full h-full bg-white rounded-[2.5rem] shadow-xl shadow-stone-200 border border-stone-100 flex flex-col items-center justify-center gap-4 hover:-translate-y-1 transition-all duration-300"
+                  disabled={isConnecting}
+                  className={`group relative w-full h-full bg-white rounded-[2.5rem] shadow-xl shadow-stone-200 border border-stone-100 flex flex-col items-center justify-center gap-4 transition-all duration-300 ${!isConnecting && 'hover:-translate-y-1'}`}
               >
-                  <div className={`w-20 h-20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 ${errorMessage ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                      {errorMessage ? <RefreshCw size={36} /> : <ShieldCheck size={36} />}
+                  <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-transform duration-300 ${!isConnecting && 'group-hover:scale-110'} ${errorMessage ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                      {/* ✅ SHOW SPINNER IF CONNECTING */}
+                      {isConnecting ? (
+                        <Loader2 size={36} className="animate-spin text-emerald-600" />
+                      ) : errorMessage ? (
+                        <RefreshCw size={36} />
+                      ) : (
+                        <ShieldCheck size={36} />
+                      )}
                   </div>
                   <div>
-                      <span className="block text-xl font-black text-stone-800">{errorMessage ? "Retry Connection" : "Start Interview"}</span>
-                      <span className="text-sm font-semibold text-stone-400">{errorMessage ? "Tap to reconnect" : "Click to connect"}</span>
+                      {/* ✅ DYNAMIC TEXT */}
+                      <span className="block text-xl font-black text-stone-800">
+                        {isConnecting ? "Connecting..." : (errorMessage ? "Retry Connection" : "Start Interview")}
+                      </span>
+                      <span className="text-sm font-semibold text-stone-400">
+                        {isConnecting ? "Establishing secure line..." : (errorMessage ? "Tap to reconnect" : "Click to connect")}
+                      </span>
                   </div>
               </button>
           )}
