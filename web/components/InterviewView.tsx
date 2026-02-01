@@ -16,11 +16,10 @@ import { useRouter } from 'next/navigation';
 interface InterviewViewProps {
   token: string | null;
   onFinish: () => void;
-  userRank: string;
-  userName: string;
+  // userRank & userName removed from props as they are now fetched by backend
 }
 
-export default function InterviewView({ token, onFinish, userRank, userName }: InterviewViewProps) {
+export default function InterviewView({ token, onFinish }: InterviewViewProps) {
   const router = useRouter();
 
   // --- LOCAL STATE ---
@@ -36,6 +35,7 @@ export default function InterviewView({ token, onFinish, userRank, userName }: I
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const nextStartTimeRef = useRef<number>(0);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // ✅ THE CRITICAL FLAG: Tracks if AI is currently outputting sound
   const isAiSpeakingRef = useRef(false);
@@ -44,6 +44,7 @@ export default function InterviewView({ token, onFinish, userRank, userName }: I
   useEffect(() => {
     return () => {
       stopRecording();
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       socketRef.current?.close();
       audioContextRef.current?.close();
     };
@@ -52,11 +53,25 @@ export default function InterviewView({ token, onFinish, userRank, userName }: I
   // --- WEBSOCKET & AUDIO LOGIC ---
   const connectToRelay = async () => {
     if (socketRef.current) return;
-    if (!token) return; 
+    
+    // 1. Token Cleanup & Validation
+    let cleanToken = token;
+    if (!cleanToken) {
+       // Fallback to localStorage if prop is null
+       cleanToken = localStorage.getItem('veteran_token');
+    }
+
+    if (!cleanToken) {
+        setErrorMessage("Authentication missing. Please log in.");
+        return;
+    }
+
+    // Remove "Bearer " and extra quotes (Common Bug Fix)
+    cleanToken = cleanToken.replace('Bearer ', '').replace(/^"|"$/g, '');
 
     setErrorMessage(null);
 
-    // 1. Initialize Audio Engine IMMEDIATELY (Bypasses Autoplay Block)
+    // 2. Initialize Audio Engine IMMEDIATELY (Bypasses Autoplay Block)
     if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     }
@@ -64,33 +79,46 @@ export default function InterviewView({ token, onFinish, userRank, userName }: I
         await audioContextRef.current.resume();
     }
 
-    const arm = localStorage.getItem('veteran_arm') || 'Infantry';
-    const branch = localStorage.getItem('veteran_branch') || 'Army';
-    const unit = localStorage.getItem('veteran_unitName') || 'Unit';
-
-    const wsUrl = `ws://localhost:8080?token=${token}`
-      + `&rank=${encodeURIComponent(userRank)}`
-      + `&name=${encodeURIComponent(userName)}`
-      + `&arm=${encodeURIComponent(arm)}`
-      + `&branch=${encodeURIComponent(branch)}`
-      + `&unit=${encodeURIComponent(unit)}`;
+    // 3. Construct Secure URL
+    // Default to localhost for dev, but allow env var for production
+    const RELAY_HOST = process.env.NEXT_PUBLIC_RELAY_HOST || 'localhost:8080';
+    // If on https, force wss (Secure WebSocket). If http, use ws.
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    
+    // ✅ PRODUCTION CHANGE: Send ONLY the token. Backend fetches User Profile.
+    const wsUrl = `${protocol}://${RELAY_HOST}?token=${cleanToken}`;
 
     const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
+      console.log("✅ Connected to Relay");
       setIsConnected(true);
       // We set this initially to prevent recording until the "Hello" is finished
       setAiSpeaking(true); 
       isAiSpeakingRef.current = true; 
       startRecording(); 
+
+      // ✅ KEEPALIVE: Ping every 30s to prevent timeout on Render/Vercel
+      pingIntervalRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "ping" }));
+          }
+      }, 30000);
     };
     
     ws.onclose = (event) => {
+      console.log("❌ Connection Closed:", event.code, event.reason);
       setIsConnected(false);
       setIsRecording(false);
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+      
+      // Handle Specific Auth Errors
       if (event.code === 1008) {
-         alert("Session Expired");
+         alert("Session Expired or Invalid. Please log in again.");
          router.push('/login');
+      } else if (event.code !== 1000) {
+         // Don't show error if closed normally (1000)
+         setErrorMessage("Connection lost. Please retry.");
       }
       stopRecording();
       socketRef.current = null;
@@ -100,11 +128,22 @@ export default function InterviewView({ token, onFinish, userRank, userName }: I
       try {
         const data = JSON.parse(event.data);
 
-        if (data.type === "SYSTEM_DISCONNECT" || data.type === "SYSTEM_ERROR") {
-           setErrorMessage(data.message);
+        // ✅ RATE LIMIT HANDLING
+        if (data.type === "SYSTEM_ERROR") {
+           let msg = data.message;
+           if (data.details && data.details.includes("429")) {
+               msg = "Server is busy (Rate Limit). Please wait 1 minute.";
+           }
+           setErrorMessage(msg);
            stopRecording();
            setIsConnected(false);
            if (socketRef.current) socketRef.current.close();
+           return;
+        }
+
+        if (data.type === "SYSTEM_DISCONNECT") {
+           setErrorMessage("Disconnected by server.");
+           stopRecording();
            return;
         }
 

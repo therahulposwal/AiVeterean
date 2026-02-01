@@ -2,13 +2,10 @@ const {
   GoogleGenAI, 
   Modality, 
   Behavior,
-  StartSensitivity,
-  EndSensitivity,
   FunctionResponseScheduling 
 } = require('@google/genai');
 const jwt = require('jsonwebtoken');
 const VeteranProfile = require('../models/VeteranProfile');
-
 const { getSystemInstruction } = require('../config/interviewInstructions');
 
 // --- CONFIG ---
@@ -36,47 +33,62 @@ async function handleInterviewConnection(ws, req) {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
   const token = url.searchParams.get('token');
-  const userName = url.searchParams.get('name') || "Soldier";
-  const userRank = url.searchParams.get('rank') || "Veteran";
-  const userArm = url.searchParams.get('arm') || "Trade";
-  const userBranch = url.searchParams.get('branch') || "Army";
-  const userUnit = url.searchParams.get('unit') || "Unit";
 
-  if (!token) { ws.close(1008, "Token Required"); return; }
+  if (!token) { 
+    ws.close(1008, "Token Required"); 
+    return; 
+  }
 
   let dbUserId;
+  let userProfile;
+
+  // 1. Verify Token & Fetch Profile (SECURITY & DB INTEGRATION)
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     dbUserId = decoded.userId;
-    console.log(`✅ Verified: ${userName} (${dbUserId})`);
+    
+    // ✅ FETCH FROM DB (Single Source of Truth)
+    userProfile = await VeteranProfile.findById(dbUserId);
+    
+    if (!userProfile) {
+      console.error("❌ User not found in DB");
+      ws.close(1008, "User Profile Not Found");
+      return;
+    }
+    
+    console.log(`✅ Verified & Loaded: ${userProfile.fullName} (${dbUserId})`);
+    
   } catch (err) { 
-    ws.close(1008, "Invalid Token"); return; 
+    console.error("❌ Auth Error:", err.message);
+    ws.close(1008, "Invalid Token"); 
+    return; 
   }
 
-  // --- CONTEXT FETCHING & EXPIRY CHECK ---
-  let existingNotes = [];
+  // 2. Extract Variables from DB Object (with defaults)
+  const userName = userProfile.fullName || "Soldier";
+  const userRank = userProfile.rank || "Veteran";
+  const userArm = userProfile.arm || "Trade";
+  const userBranch = userProfile.branch || "Armed Forces";
+  const userUnit = userProfile.unitName || "Unit";
+
+  // 3. Context Fetching & Session Expiry Check
+  let existingNotes = userProfile.interviewNotes || []; 
   let previousSessionHandle = null; 
 
-  try {
-    const profile = await VeteranProfile.findById(dbUserId);
-    existingNotes = profile ? profile.interviewNotes : [];
-    
-    // ✅ FIX: CHECK SESSION AGE
-    if (profile && profile.lastSessionHandle && profile.lastSessionTs) {
-        const sessionAgeMs = Date.now() - new Date(profile.lastSessionTs).getTime();
-        const MAX_SESSION_AGE = 15 * 60 * 1000; // 15 Minutes
+  if (userProfile.lastSessionHandle && userProfile.lastSessionTs) {
+    const sessionAgeMs = Date.now() - new Date(userProfile.lastSessionTs).getTime();
+    const MAX_SESSION_AGE = 15 * 60 * 1000; // 15 Minutes
 
-        if (sessionAgeMs < MAX_SESSION_AGE) {
-            previousSessionHandle = profile.lastSessionHandle;
-            console.log(`🔄 RESUMING ACTIVE SESSION (Age: ${Math.floor(sessionAgeMs/1000)}s)`);
-        } else {
-            console.log("⚠️ PREVIOUS SESSION EXPIRED. Starting Fresh.");
-            // We intentionally leave previousSessionHandle as null
-        }
+    if (sessionAgeMs < MAX_SESSION_AGE) {
+      previousSessionHandle = userProfile.lastSessionHandle;
+      console.log(`🔄 RESUMING ACTIVE SESSION (Age: ${Math.floor(sessionAgeMs/1000)}s)`);
+    } else {
+      console.log("⚠️ PREVIOUS SESSION EXPIRED. Starting Fresh.");
+      // We explicitly leave previousSessionHandle as null
     }
-  } catch (err) { console.error("Error fetching profile:", err); }
+  }
 
-  // --- SYSTEM PROMPT ---
+  // 4. Construct System Instructions
   let contextInstruction = existingNotes.length > 0 
     ? `IMPORTANT: RESUMED SESSION. User details: ${existingNotes.join(", ")}.` 
     : `NEW SESSION.`;
@@ -92,8 +104,9 @@ async function handleInterviewConnection(ws, req) {
     4. **NO ECHOES**: If you hear a short noise or your own voice, IGNORE IT.
   `;
 
-  console.log(`📝 Persona: ${userBranch} (${userArm})`);
+  console.log(`📝 Persona: ${userBranch} (${userArm}) - ${userName}`);
 
+  // 5. Initialize Gemini
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   let session = null;
 
@@ -106,28 +119,21 @@ async function handleInterviewConnection(ws, req) {
         tools: NOTE_TAKER_TOOL,
         toolConfig: { functionCallingConfig: { mode: "AUTO" } }, 
         
+        // Sliding window to save tokens/memory
         contextWindowCompression: { slidingWindow: {} },
         
-        // Pass handle ONLY if it's valid
+        // Pass handle ONLY if it's valid (based on DB check above)
         sessionResumption: { handle: previousSessionHandle },
 
         speechConfig: { 
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } },
         },
-        
-        
-        // realtimeInputConfig: {
-        //     // automaticActivityDetection: {
-        //     //     disabled: false, 
-        //     //     prefixPaddingMs: 500, 
-        //     //     silenceDurationMs: 2000,
-        //     // }
-        // },
       },
       callbacks: {
         onopen: () => console.log('🤖 VEER AI Connected & Listening...'),
 
         onmessage: async (msg) => {
+          // Handle Audio Output
           if (msg.serverContent?.modelTurn?.parts) {
             const parts = msg.serverContent.modelTurn.parts;
             for (const part of parts) {
@@ -139,19 +145,20 @@ async function handleInterviewConnection(ws, req) {
               }
             }
           }
+          // Handle Root Level Tool Calls
           if (msg.toolCall) {
             await handleToolCall(session, msg.toolCall, dbUserId);
           }
 
-          // ✅ SAVE NEW HANDLE + TIMESTAMP
+          // ✅ SAVE NEW SESSION HANDLE + TIMESTAMP TO DB
           if (msg.sessionResumptionUpdate) {
              const update = msg.sessionResumptionUpdate;
              if (update.resumable && update.newHandle) {
-                // Fire-and-forget save
+                // Fire-and-forget save to MongoDB
                 VeteranProfile.findByIdAndUpdate(dbUserId, {
                     lastSessionHandle: update.newHandle,
-                    lastSessionTs: new Date() // <--- Saving Time
-                }).catch(e => console.error("DB Error:", e));
+                    lastSessionTs: new Date() // Updates timestamp for timeout logic
+                }).catch(e => console.error("DB Save Handle Error:", e));
              }
           }
         },
@@ -174,13 +181,15 @@ async function handleInterviewConnection(ws, req) {
 
     console.log("⚡ Sending Auto-Start Signal...");
     
-    // Resume Logic
+    // 6. Initial Greeting Logic
     if (!previousSessionHandle) {
+        // Fresh Session
         const startMessage = existingNotes.length > 0 
           ? `I am back. Let's continue.` 
           : `Hello, I am ready.`;
         await session.sendRealtimeInput({ text: startMessage });
     } else {
+        // Resumed Session
         console.log("🔄 Waking up resumed session...");
         await session.sendRealtimeInput({ 
             text: "SYSTEM: Connection restored. Briefly welcome the user back." 
@@ -193,6 +202,7 @@ async function handleInterviewConnection(ws, req) {
     return;
   }
 
+  // 7. WebSocket Incoming Message Handling
   ws.on('message', (data) => {
     if (!session) return;
     try {
@@ -219,8 +229,8 @@ async function handleInterviewConnection(ws, req) {
   });
 }
 
+// 8. Tool Execution Logic (Saves to DB)
 async function handleToolCall(session, toolCall, dbUserId) {
-  // ... (Your tool call logic remains the same)
   console.log("⚙️ TOOL CALL RECEIVED");
   const functionCalls = toolCall.functionCalls;
   const functionResponses = [];
@@ -232,6 +242,7 @@ async function handleToolCall(session, toolCall, dbUserId) {
         const fact = args.fact; 
         console.log(`📝 LOGGING FACT: "${fact}"`);
 
+        // Send 'ok' back to Gemini immediately so it keeps talking
         functionResponses.push({
           id: call.id,
           name: call.name,
@@ -241,10 +252,12 @@ async function handleToolCall(session, toolCall, dbUserId) {
           }
         });
 
+        // ✅ SAVE NOTE TO DB
         if (dbUserId) {
           VeteranProfile.findByIdAndUpdate(dbUserId, {
             $push: { interviewNotes: fact }
-          }).then(() => console.log("✅ Saved to DB")).catch(e => console.error("DB Error:", e));
+          }).then(() => console.log("✅ Fact Saved to DB"))
+            .catch(e => console.error("DB Fact Save Error:", e));
         }
       } catch (e) {
         functionResponses.push({
