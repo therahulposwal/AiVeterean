@@ -10,7 +10,7 @@ import {
     Sparkles, 
     AlertTriangle, 
     RefreshCw,
-    Loader2 // Added specific loader icon
+    Loader2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -24,7 +24,7 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
 
   // --- LOCAL STATE ---
   const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false); // ✅ NEW LOADING STATE
+  const [isConnecting, setIsConnecting] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -40,6 +40,9 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
   
   // ✅ THE CRITICAL FLAG: Tracks if AI is currently outputting sound
   const isAiSpeakingRef = useRef(false);
+  
+  // ✅ NEW FLAG: Tracks if we are intentionally submitting so we ignore disconnect errors
+  const isSubmittingRef = useRef(false);
 
   // --- CLEANUP ---
   useEffect(() => {
@@ -55,9 +58,9 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
   const connectToRelay = async () => {
     if (socketRef.current || isConnecting) return;
     
-    // ✅ START LOADING
     setIsConnecting(true);
     setErrorMessage(null);
+    isSubmittingRef.current = false; // Reset submission flag on new connection
 
     // 1. Token Cleanup & Validation
     let cleanToken = token;
@@ -67,13 +70,13 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
 
     if (!cleanToken) {
         setErrorMessage("Authentication missing. Please log in.");
-        setIsConnecting(false); // Stop loading on error
+        setIsConnecting(false);
         return;
     }
 
     cleanToken = cleanToken.replace('Bearer ', '').replace(/^"|"$/g, '');
 
-    // 2. Initialize Audio Engine IMMEDIATELY (Bypasses Autoplay Block)
+    // 2. Initialize Audio Engine
     try {
         if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -95,9 +98,8 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
     ws.onopen = () => {
       console.log("✅ Connected to Relay");
       setIsConnected(true);
-      setIsConnecting(false); // ✅ CONNECTION SUCCESS: STOP LOADING
+      setIsConnecting(false);
       
-      // We set this initially to prevent recording until the "Hello" is finished
       setAiSpeaking(true); 
       isAiSpeakingRef.current = true; 
       startRecording(); 
@@ -111,9 +113,15 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
     };
     
     ws.onclose = (event) => {
+      // ✅ FIX: If we are intentionally submitting, ignore the close event entirely
+      if (isSubmittingRef.current) {
+          console.log("✅ Intentional disconnect for submission");
+          return;
+      }
+
       console.log("❌ Connection Closed:", event.code, event.reason);
       setIsConnected(false);
-      setIsConnecting(false); // ✅ CONNECTION FAILED: STOP LOADING
+      setIsConnecting(false);
       setIsRecording(false);
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       
@@ -246,12 +254,25 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
   };
 
   const handleFinishWrapper = async () => {
+    // ✅ FIX: Mark that we are intentionally closing the connection
+    isSubmittingRef.current = true;
+    setErrorMessage(null); // Clear any lingering errors
+
     stopRecording();
-    if (socketRef.current) { socketRef.current.close(); socketRef.current = null; }
+    
+    if (socketRef.current) { 
+        // Close with a Normal closure code just to be clean
+        socketRef.current.close(1000, "User submitted interview"); 
+        socketRef.current = null; 
+    }
+    
     setIsConnected(false);
     setIsProcessing(true);
+    
     await onFinish();
+    
     setIsProcessing(false);
+    isSubmittingRef.current = false; // Reset for potential re-use
   };
 
   return (
@@ -294,7 +315,6 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
                   className={`group relative w-full h-full bg-white rounded-[2.5rem] shadow-xl shadow-stone-200 border border-stone-100 flex flex-col items-center justify-center gap-4 transition-all duration-300 ${!isConnecting && 'hover:-translate-y-1'}`}
               >
                   <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-transform duration-300 ${!isConnecting && 'group-hover:scale-110'} ${errorMessage ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                      {/* ✅ SHOW SPINNER IF CONNECTING */}
                       {isConnecting ? (
                         <Loader2 size={36} className="animate-spin text-emerald-600" />
                       ) : errorMessage ? (
@@ -304,7 +324,6 @@ export default function InterviewView({ token, onFinish }: InterviewViewProps) {
                       )}
                   </div>
                   <div>
-                      {/* ✅ DYNAMIC TEXT */}
                       <span className="block text-xl font-black text-stone-800">
                         {isConnecting ? "Connecting..." : (errorMessage ? "Retry Connection" : "Start Interview")}
                       </span>
