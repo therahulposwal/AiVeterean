@@ -115,6 +115,7 @@ async function handleInterviewConnection(ws, req) {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } },
         },
         
+        
         // realtimeInputConfig: {
         //     // automaticActivityDetection: {
         //     //     disabled: false, 
@@ -235,7 +236,7 @@ async function handleToolCall(session, toolCall, dbUserId) {
           id: call.id,
           name: call.name,
           response: {
-            result: { status: "success" }, 
+            result: "ok", 
             scheduling: FunctionResponseScheduling.SILENT
           }
         });

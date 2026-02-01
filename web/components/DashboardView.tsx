@@ -25,7 +25,7 @@ export default function DashboardView({ profile }: DashboardProps) {
     if (!confirmed) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('veteran_token');
       
       // Call the API route we created
       const res = await fetch('/api/reset-interview', {
@@ -42,7 +42,7 @@ export default function DashboardView({ profile }: DashboardProps) {
         localStorage.removeItem('veteran_summary');
         
         // Force a hard refresh/redirect to the interview page
-        router.push('/interview'); 
+        window.location.href = '/';
         router.refresh(); 
       } else {
         alert("Failed to reset: " + data.error);
