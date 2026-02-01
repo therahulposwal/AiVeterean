@@ -11,6 +11,16 @@ const { handleInterviewConnection } = require('./services/liveInterview');
 const app = express();
 app.use(cors());
 
+// ✅ Ping Route
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Relay Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ DB Error:', err));
@@ -20,7 +30,7 @@ const wss = new WebSocket.Server({ server });
 
 // Delegate to handler
 wss.on('connection', (ws, req) => {
-    handleInterviewConnection(ws, req);
+  handleInterviewConnection(ws, req);
 });
 
 const PORT = process.env.PORT || 8080;
