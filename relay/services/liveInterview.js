@@ -26,7 +26,7 @@ const logFactDeclaration = {
   }
 };
 
-const NOTE_TAKER_TOOL = [{ functionDeclarations: [logFactDeclaration] }];
+const NOTE_TAKER_TOOL = [{functionDeclarations: [logFactDeclaration] }];
 
 async function handleInterviewConnection(ws, req) {
   console.log('🔌 New Client Connection...');
@@ -127,7 +127,7 @@ async function handleInterviewConnection(ws, req) {
 
         speechConfig: { 
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } },
-        },
+        }
       },
       callbacks: {
         onopen: () => console.log('🤖 VEER AI Connected & Listening...'),

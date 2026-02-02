@@ -59,7 +59,10 @@ export async function POST(req: Request) {
       
       TASK:
       Analyze the raw notes and extract a structured professional profile.
-      Infer logical dates, locations, or standard duties if they are implied but not explicitly stated.
+      Use only the information explicitly present in the notes.
+      Do not infer, assume, or fabricate any facts.
+      Preserve original intent, hierarchy, and factual accuracy.
+      If any required detail is missing, leave the field blank or mark it as "Not Provided".
       
       OUTPUT FORMAT (Strict JSON):
       You must return a JSON object matching this exact schema:
