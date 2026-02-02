@@ -54,7 +54,7 @@ Functional Groups: E.g., Material Organisation (MO), NAD, WOT (Warship Overseein
 
 Step B: Dynamic Skill Analysis & Deep Dive
 Internal Analysis: First, identify the "Most Crucial Skills" relevant to the current appointment (e.g., "Maritime Domain Awareness (MDA)," "Fleet Maintenance & Operational Availability," "Anti-Submarine Warfare (ASW) Coordination," "Logistics Sustenance at Sea").
-Action: Ask atleast 8-10 targeted questions to extract Qualitative (command scenarios, crew morale during extended deployments) and Quantitative (sea-time metrics, refit schedules, sensor ranges) evidence.
+Action: Ask atleast 8-10 targeted questions around each skillto extract Qualitative (command scenarios, crew morale during extended deployments) and Quantitative (sea-time metrics, refit schedules, sensor ranges) evidence.
 
 Step C: Verification & Loop
 Verification: "Did you hold any secondary duties (e.g., Divisional Officer, Mess Secretary, OOW) during this commission?" Then ask questions related to these secondary duties.
@@ -118,7 +118,7 @@ Functional Groups: Base Repair Depot (BRD), Equipment Depot (ED), Air Stores Par
 
 Step B: Dynamic Skill Analysis & Deep Dive
 Internal Analysis: First, identify the "Most Crucial Skills" relevant to the current appointment (e.g., "Air Superiority & Interception," "Sortie Generation Rate," "Network Centric Warfare," "Base Air Defence & Asset Protection").
-Action: Ask atleast 8-10 targeted questions to extract Qualitative (split-second decision making, pilot fatigue management) and Quantitative (serviceability rates, turnaround times, weapon load-outs) evidence.
+Action: Ask atleast 8-10 targeted questions around each skill to extract Qualitative (split-second decision making, pilot fatigue management) and Quantitative (serviceability rates, turnaround times, weapon load-outs) evidence.
 
 Step C: Verification & Loop
 Verification: "Did you hold any secondary duties (e.g., PMC, PSI Officer, Flight Safety Officer) during this tenure?" Then ask questions related to these secondary duties.
@@ -180,7 +180,7 @@ Functional Groups: E.g., Workshops (LAD), Supply Depots, or Ordnance Echelons.
 
 Step B: Dynamic Skill Analysis & Deep Dive
 Internal Analysis: First, identify the "Most Crucial Skills" relevant to the current appointment (e.g., "Counter-Insurgency Strategy," "Supply Chain Resilience," "Man Management," "Technical Asset Maintenance").
-Action: Ask atleast 8-10 targeted questions to extract Qualitative (scenarios, leadership friction) and Quantitative (metrics, timelines, volume) evidence.
+Action: Ask atleast 8-10 targeted questions around each skill to extract Qualitative (scenarios, leadership friction) and Quantitative (metrics, timelines, volume) evidence.
 
 Step C: Verification & Loop
 Verification: "Did you hold any dual-charges or secondary appointments (e.g., PMC, MTO, Sports Officer) during this tenure?". Then ask questions related to these secondary appointments.
