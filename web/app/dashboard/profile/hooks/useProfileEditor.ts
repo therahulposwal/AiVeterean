@@ -58,6 +58,7 @@ export function useProfileEditor(initialProfile: VeteranProfilePayload, onRetake
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRetaking, setIsRetaking] = useState(false);
   const [formData, setFormData] = useState<VeteranProfilePayload>(normalizedInitialProfile);
 
   useEffect(() => {
@@ -95,13 +96,22 @@ export function useProfileEditor(initialProfile: VeteranProfilePayload, onRetake
   }, [initialProfile]);
 
   const handleRetake = useCallback(async () => {
+    setIsRetaking(true);
+
     if (onRetake) {
-      onRetake();
+      try {
+        await Promise.resolve(onRetake());
+      } finally {
+        setIsRetaking(false);
+      }
       return;
     }
 
     const confirmed = window.confirm('Retake interview? This will reset your current generated profile.');
-    if (!confirmed) return;
+    if (!confirmed) {
+      setIsRetaking(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/reset-interview', {
@@ -110,6 +120,7 @@ export function useProfileEditor(initialProfile: VeteranProfilePayload, onRetake
       const data = (await res.json()) as { success: boolean; error?: string };
       if (!data.success) {
         alert(`Failed to reset: ${data.error || 'Unknown error'}`);
+        setIsRetaking(false);
         return;
       }
 
@@ -117,6 +128,7 @@ export function useProfileEditor(initialProfile: VeteranProfilePayload, onRetake
       router.refresh();
     } catch {
       alert('Connection failed.');
+      setIsRetaking(false);
     }
   }, [onRetake, router]);
 
@@ -218,6 +230,7 @@ export function useProfileEditor(initialProfile: VeteranProfilePayload, onRetake
   return {
     isEditing,
     isSaving,
+    isRetaking,
     formData,
     setFormData,
     setIsEditing,

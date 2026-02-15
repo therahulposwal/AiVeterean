@@ -59,6 +59,7 @@ export default function ProfileView({ profile, onRetake }: ProfileViewProps) {
   const {
     isEditing,
     isSaving,
+    isRetaking,
     formData,
     setIsEditing,
     handleSave,
@@ -236,9 +237,13 @@ export default function ProfileView({ profile, onRetake }: ProfileViewProps) {
                     <button onClick={() => setIsEditing(true)} className="w-full sm:flex-1 whitespace-nowrap flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-zinc-100 text-zinc-950 font-bold text-sm hover:bg-white transition-all active:scale-95">
                         <Edit2 size={16} /> Edit Profile
                     </button>
-                    <button onClick={handleRetake} className="w-full sm:w-auto px-4 py-3 rounded-xl bg-zinc-900 text-zinc-300 border border-zinc-800 hover:text-white hover:border-zinc-600 transition-all inline-flex items-center justify-center gap-2">
-                        <RefreshCw size={16} />
-                        <span className="text-sm font-semibold">Retake Interview</span>
+                    <button
+                      onClick={handleRetake}
+                      disabled={isRetaking}
+                      className="w-full sm:w-auto px-4 py-3 rounded-xl bg-zinc-900 text-zinc-300 border border-zinc-800 hover:text-white hover:border-zinc-600 transition-all inline-flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                        <RefreshCw size={16} className={isRetaking ? "animate-spin" : ""} />
+                        <span className="text-sm font-semibold">{isRetaking ? "Retaking..." : "Retake Interview"}</span>
                     </button>
                 </div>
             ) : (
