@@ -1,56 +1,65 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/dbConnect';
 import VeteranProfile from '@/models/VeteranProfile';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getAuthenticatedUserIdFromRequest } from '@/lib/auth';
 
-// Using the fast & stable model for text generation
+// Using Gemini 1.5 Flash or 2.0 Flash for speed and accuracy
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-export async function POST(req: Request) {
+type BuildProfileBody = {
+  userId?: string;
+};
+
+export async function POST(req: NextRequest) {
   try {
-    const { userId } = await req.json();
+    const authenticatedUserId = getAuthenticatedUserIdFromRequest(req);
+    let userIdFromBody: string | null = null;
+
+    // Body is optional for this route (client currently sends an empty POST).
+    const rawBody = await req.text();
+    if (rawBody.trim().length > 0) {
+      let parsedBody: BuildProfileBody;
+      try {
+        parsedBody = JSON.parse(rawBody) as BuildProfileBody;
+      } catch {
+        return NextResponse.json({ success: false, message: 'Invalid request body' }, { status: 400 });
+      }
+      userIdFromBody = typeof parsedBody.userId === 'string' ? parsedBody.userId : null;
+    }
+
+    const userId = authenticatedUserId ?? userIdFromBody;
 
     console.log("------------------------------------------------");
     console.log("🕵️  PROFILE ARCHITECT: STARTING JOB");
-    console.log(`🔎  Looking for _id: "${userId}"`);
 
     if (!userId) {
-      return NextResponse.json({ success: false, message: "User ID Missing" }, { status: 400 });
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
     await dbConnect();
     const profile = await VeteranProfile.findById(userId);
 
     if (!profile) {
-      console.error("❌  Profile NOT FOUND in DB");
       return NextResponse.json({ success: false, message: "Profile Not Found" }, { status: 404 });
     }
 
-    const noteCount = profile.interviewNotes?.length || 0;
-    console.log(`✅  Profile Found. Notes Available: ${noteCount}`);
-
-    if (noteCount === 0) {
-      console.warn("⚠️  Interview Notes are Empty");
-      return NextResponse.json({ 
-        success: false, 
-        message: "No interview notes found. Please speak to the AI first." 
-      }, { status: 404 });
+    const rawData = profile.interviewNotes?.join("\n") || "";
+    
+    if (!rawData) {
+      return NextResponse.json({ success: false, message: "No notes found" }, { status: 400 });
     }
 
-    // 2. Prepare Data
-    console.log("📝  Compiling Transcript...");
-    const rawData = profile.interviewNotes.join("\n");
-    
-    // ✅ INJECT NEW FIELDS INTO PROMPT
+    // ✅ PROMPT UPDATED: Added Professional Summary & Data Restrictions
     const prompt = `
       You are an expert Military-to-Civilian Resume Architect.
       
       CANDIDATE PROFILE:
-      - Service Branch: ${profile.branch}      // ✅ NEW
+      - Service Branch: ${profile.branch}
       - Rank: ${profile.rank}
       - Arm/Trade: ${profile.arm}
-      - Last Unit/Base: ${profile.unitName}    // ✅ NEW
+      - Last Unit/Base: ${profile.unitName}
       
       SOURCE DATA (Raw Interview Notes):
       ---
@@ -58,60 +67,62 @@ export async function POST(req: Request) {
       ---
       
       TASK:
-      Analyze the raw notes and extract a structured professional profile.
-      Use only the information explicitly present in the notes.
-      Do not infer, assume, or fabricate any facts.
-      Preserve original intent, hierarchy, and factual accuracy.
-      If any required detail is missing, leave the field blank or mark it as "Not Provided".
+      1. Write a 3-4 sentence "professionalSummary" translating military leadership into corporate value.
+      2. Extract "workExperience", "technicalSkills", "softSkills", "courses", and "achievements".
+      3. Use ONLY explicitly mentioned facts. Do not fabricate.
+      4. Do NOT extract education/degrees (User will provide these manually).
       
       OUTPUT FORMAT (Strict JSON):
-      You must return a JSON object matching this exact schema:
       {
+        "professionalSummary": "High-impact summary string...",
         "workExperience": [
           {
-            "role": "Job Title (e.g. Platoon Commander)",
-            "unit": "Unit Name (e.g. 15 Rashtriya Rifles)",
-            "location": "City/Region (e.g. J&K)",
-            "startDate": "Year (e.g. 2015)",
-            "endDate": "Year (e.g. 2018)",
-            "responsibilities": ["Action verb bullet point 1", "Action verb bullet point 2"]
+            "role": "Job Title",
+            "unit": "Unit Name",
+            "location": "City/Region",
+            "startDate": "Year",
+            "endDate": "Year",
+            "responsibilities": ["Action verb bullet 1", "Action verb bullet 2"]
           }
         ],
-        "technicalSkills": ["Skill 1", "Skill 2"],
-        "softSkills": ["Leadership", "Discipline"],
-        "courses": ["Course Name 1", "Course Name 2"],
-        "achievements": ["Award or Achievement 1"]
+        "technicalSkills": [],
+        "softSkills": [],
+        "courses": [],
+        "achievements": []
       }
 
-      Do NOT wrap the output in markdown code blocks. Return raw JSON only.
+      Return raw JSON only. No markdown formatting.
     `;
 
-    // 3. Generate Content
-    console.log("🤖  Calling Gemini 3 Flash...");
+    console.log("🤖  Generating AI Content...");
     const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text();
+    let text = result.response.text();
 
-    // 4. Sanitize
+    // Sanitize
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
-    // 5. Parse & Save
     let structuredData;
     try {
       structuredData = JSON.parse(text);
-      console.log("✨  JSON Parsed Successfully");
-    } catch (e) {
-      console.error("🔥  JSON Parse Error. Raw Output:", text);
-      return NextResponse.json({ success: false, message: "AI Generation Failed (Invalid JSON)" }, { status: 500 });
+    } catch {
+      console.error("🔥 JSON Parse Error:", text);
+      return NextResponse.json({ success: false, message: "Invalid AI Output" }, { status: 500 });
     }
 
-    profile.profileData = structuredData;
-    profile.isInterviewComplete = true; // Mark as done
+    // ✅ DATA MERGE STRATEGY
+    // We keep 'education' if it exists in profileData, but overwrite other fields with fresh AI data.
+    profile.profileData = {
+        ...(profile.profileData || {}), // Keep manual data (like education)
+        ...structuredData              // Overwrite with AI data (summary, work, skills)
+    };
+
+    profile.isInterviewComplete = true;
     
+    // Explicitly set the timestamp to trigger the 'key' refresh in the frontend
+    profile.markModified('profileData'); 
     await profile.save();
     
-    console.log("💾  Saved Structured Data to MongoDB");
-    console.log("🎉  JOB COMPLETE");
+    console.log("🎉  PROFILE BUILT & SAVED");
     console.log("------------------------------------------------");
 
     return NextResponse.json({ 
@@ -119,8 +130,9 @@ export async function POST(req: Request) {
       data: structuredData 
     });
 
-  } catch (error: any) {
-    console.error("🔥  FATAL ERROR:", error.message);
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Server error';
+    console.error("🔥 FATAL ERROR:", message);
+    return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

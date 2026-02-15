@@ -1,38 +1,42 @@
 const mongoose = require('mongoose');
 
 const VeteranProfileSchema = new mongoose.Schema({
-  userId: { type: String, index: true }, 
-  phoneNumber: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  phoneNumber: { type: String, unique: true, sparse: true }, 
+  
+  // ✅ ADDED EMAIL (Unique + Sparse allows it to be optional but unique if present)
+  email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
+  linkedin: { type: String, trim: true },
+  
+  password: { type: String }, // Hashed
   fullName: String,
-  branch: { type: String, default: 'Army' },
   rank: String,
   arm: String,
+  branch: String,
   unitName: String,
-
-  // ✅ NEW FIELD: default false, set to true ONLY on "Generate Profile"
-  isInterviewComplete: { type: Boolean, default: false },
-
-  interviewNotes: [String],
-  lastSessionHandle: { type: String },
-  lastSessionTs: { type: Date }, 
-
-  profileData: {
-    workExperience: [{
-      role: String,
-      unit: String,
-      location: String,
-      startDate: String,
-      endDate: String,
-      responsibilities: [String]
-    }],
-    technicalSkills: [String],
-    softSkills: [String],
-    courses: [String],
-    achievements: [String]
-  },
   
-  createdAt: { type: Date, default: Date.now }
-});
+  // State Machine Tracking
+  interviewPhase: { type: String, default: 'FOUNDATION' }, 
+  appointmentCount: { type: Number, default: 0 }, // Critical for loops
 
-module.exports = mongoose.model('VeteranProfile', VeteranProfileSchema);
+  // Data Buckets
+  interviewNotes: [String],
+  
+  isInterviewComplete: { type: Boolean, default: false },
+  
+  // Session Persistence
+  lastSessionHandle: String,
+  lastSessionTs: Date,
+
+  // Generated Profile JSON
+  profileData: { type: Object }
+   
+}, { timestamps: true });
+
+const existingModel = mongoose.models.VeteranProfile;
+
+// Hot-reload safety: patch cached schema if it was created before linkedin existed.
+if (existingModel && !existingModel.schema.path('linkedin')) {
+  existingModel.schema.add({ linkedin: { type: String, trim: true } });
+}
+
+module.exports = existingModel || mongoose.model('VeteranProfile', VeteranProfileSchema);

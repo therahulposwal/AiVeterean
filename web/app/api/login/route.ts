@@ -2,10 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/dbConnect';
 import VeteranProfile from '@/models/VeteranProfile';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-
-// FIX 1: Ensure JWT_SECRET is treated as a string, not undefined
-const JWT_SECRET = process.env.JWT_SECRET;
+import { signSessionToken } from '@/lib/session';
 
 export async function POST(req: Request) {
   try {
@@ -34,31 +31,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Invalid credentials" }, { status: 401 });
     }
 
-    // FIX 3: runtime check for Secret
-    if (!JWT_SECRET) {
-        console.error("JWT_SECRET is not defined in .env file");
-        return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
-    }
-
     // 3. Generate Session Token (JWT)
-    const token = jwt.sign(
-      { userId: user._id, rank: user.rank }, 
-      JWT_SECRET, // Validated above as string
-      { expiresIn: '1d' }
-    );
+    const token = signSessionToken(String(user._id), user.rank);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      token,
       user: {
         userId: user._id,
         fullName: user.fullName,
         rank: user.rank,
         arm: user.arm,
         branch: user.branch,     
-        unitName: user.unitName  
+        unitName: user.unitName,
+        isInterviewComplete: Boolean(user.isInterviewComplete),
       }
     });
+
+    response.cookies.set({
+      name: 'veteran_token',
+      value: token,
+      path: '/',
+      maxAge: 60 * 60 * 24, // 1 day
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+    });
+
+    return response;
 
   } catch (error) {
     console.error('Login Error:', error);

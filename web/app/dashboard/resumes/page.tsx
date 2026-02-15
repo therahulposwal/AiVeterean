@@ -1,15 +1,12 @@
 import { redirect } from 'next/navigation';
+import ResumesClient from './ResumesClient';
 import { getAuthenticatedProfile } from '@/lib/auth';
 
-export default async function HomePage() {
+export default async function ResumesPage() {
   const profile = await getAuthenticatedProfile();
   if (!profile) {
     redirect('/login');
   }
 
-  if (profile.isInterviewComplete) {
-    redirect('/dashboard/profile');
-  }
-
-  redirect('/interview');
+  return <ResumesClient profile={profile} />;
 }

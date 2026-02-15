@@ -3,33 +3,71 @@ import dbConnect from '@/lib/dbConnect';
 import VeteranProfile from '@/models/VeteranProfile';
 import bcrypt from 'bcryptjs';
 
+interface RegisterBody {
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  password: string;
+  branch: string;
+  rank: string;
+  arm: string;
+  unitName: string;
+}
+
 export async function POST(req: Request) {
   try {
-    // ✅ Extract new fields
-    const { fullName, phoneNumber, password, branch, rank, arm, unitName } = await req.json();
+    const { fullName, email, phoneNumber, password, branch, rank, arm, unitName } = (await req.json()) as RegisterBody;
+    const normalizedEmail = email?.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
+    }
 
     await dbConnect();
 
-    const existingUser = await VeteranProfile.findOne({ phoneNumber });
-    if (existingUser) {
+    // 1. Check Phone
+    const existingPhone = await VeteranProfile.findOne({ phoneNumber });
+    if (existingPhone) {
       return NextResponse.json({ success: false, error: "Phone number already registered" }, { status: 400 });
+    }
+
+    // 2. Check Email
+    const existingEmail = await VeteranProfile.findOne({ email: normalizedEmail });
+    if (existingEmail) {
+      return NextResponse.json({ success: false, error: "Email already registered" }, { status: 400 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await VeteranProfile.create({
+    const userPayload: {
+      fullName: string;
+      email: string;
+      phoneNumber: string;
+      password: string;
+      branch: string;
+      rank: string;
+      arm: string;
+      unitName: string;
+      isInterviewComplete: boolean;
+      interviewNotes: string[];
+      profileData: Record<string, never>;
+    } = {
       fullName,
+      email: normalizedEmail,
       phoneNumber,
       password: hashedPassword,
-      branch,    // ✅ Saved
+      branch,
       rank,
       arm,
-      unitName,  // ✅ Saved
+      unitName,
       
+      // Defaults
       isInterviewComplete: false,
       interviewNotes: [],
       profileData: {}
-    });
+    };
+
+    const user = await VeteranProfile.create(userPayload);
 
     return NextResponse.json({ 
       success: true, 
@@ -38,8 +76,9 @@ export async function POST(req: Request) {
       arm: user.arm 
     });
 
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Server error';
     console.error("Registration Error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
