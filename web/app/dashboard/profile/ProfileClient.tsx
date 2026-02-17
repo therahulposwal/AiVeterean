@@ -192,12 +192,12 @@ export default function ProfileView({ profile, onRetake }: ProfileViewProps) {
                         <input value={formData.linkedin || ''} onChange={(e) => handleChange('linkedin', e.target.value)} className={`${inputBase} pl-9 w-full md:w-72`} placeholder="LinkedIn URL (Optional)" />
                       </div>
                   ) : (
-                      formData.linkedin && (
-                        <div className="w-full md:w-auto max-w-full flex items-center gap-2 text-zinc-400 text-sm font-medium bg-zinc-950 px-3 py-1.5 rounded-xl md:rounded-full border border-zinc-800">
-                          <Linkedin size={14} className="shrink-0" />
-                          <span className="break-all text-left leading-tight">{formData.linkedin}</span>
-                        </div>
-                      )
+                    <div className="w-full md:w-auto max-w-full flex items-center gap-2 text-zinc-400 text-sm font-medium bg-zinc-950 px-3 py-1.5 rounded-xl md:rounded-full border border-zinc-800">
+                      <Linkedin size={14} className="shrink-0" />
+                      <span className={`break-all text-left leading-tight ${!formData.linkedin ? "text-zinc-600 italic" : ""}`}>
+                        {formData.linkedin || "Click on edit profile to add"}
+                      </span>
+                    </div>
                   )}
               </div>
 
