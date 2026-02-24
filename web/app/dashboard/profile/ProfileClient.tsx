@@ -117,10 +117,21 @@ export default function ProfileView({ profile, onRetake }: ProfileViewProps) {
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out font-sans selection:bg-zinc-800 selection:text-white">
       
       {/* HERO HEADER */}
-      <div className="relative group overflow-hidden bg-zinc-900/80 backdrop-blur-xl rounded-3xl md:rounded-[2rem] p-4 md:p-10 mb-6 md:mb-8 border border-zinc-800/80 shadow-[0_20px_70px_rgba(0,0,0,0.30)]">
+      <div 
+        className="relative group overflow-hidden rounded-3xl md:rounded-[2rem] p-4 md:p-10 mb-6 md:mb-8 border border-zinc-800/80 shadow-[0_20px_70px_rgba(0,0,0,0.30)]"
+        style={{
+          backgroundColor: 'hsla(0, 0%, 9%, 1)',
+          backgroundImage: `
+            radial-gradient(at 88% 10%, hsla(240, 15%, 20%, 1) 0px, transparent 50%),
+            radial-gradient(at 0% 91%, hsla(240, 15%, 20%, 1) 0px, transparent 50%),
+            radial-gradient(at 81% 94%, hsla(263, 21%, 15%, 1) 0px, transparent 50%),
+            radial-gradient(at 10% 12%, hsla(263, 21%, 15%, 1) 0px, transparent 50%)
+          `
+        }}
+      >
         {/* Background Effects */}
         <div className="absolute top-0 right-0 w-[50%] h-full bg-gradient-to-l from-emerald-900/10 to-transparent blur-3xl pointer-events-none"></div>
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
+        <div className="absolute inset-0 opacity-20 pointer-events-none mix-blend-overlay" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
         
         <div className="relative z-10 flex flex-col xl:flex-row gap-6 md:gap-8 items-start xl:items-center justify-between">
           <div className="flex flex-col md:flex-row items-start md:items-start gap-5 md:gap-6 text-left w-full">
