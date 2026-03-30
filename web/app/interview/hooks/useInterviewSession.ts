@@ -85,7 +85,8 @@ export function useInterviewSession({ onUnauthorized }: UseInterviewSessionOptio
       buffer.getChannelData(0).set(float32Data);
       const currentTime = context.currentTime;
       if (nextStartTimeRef.current < currentTime) {
-        nextStartTimeRef.current = currentTime + 0.05;
+        // Add a 200ms jitter buffer to prevent stuttering on the first few words
+        nextStartTimeRef.current = currentTime + 0.2;
       }
 
       const source = context.createBufferSource();
