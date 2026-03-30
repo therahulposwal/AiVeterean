@@ -199,25 +199,11 @@ async function handleInterviewConnection(ws, req) {
   const systemInstruction = `
 ${baseInstruction}
 
-### CRITICAL BEHAVIORAL RULES (ABSOLUTE - NEVER VIOLATE)
-
-1. ONE QUESTION AT A TIME - Ask one question, WAIT for complete answer, THEN ask next
-2. WAIT FOR USER TO FINISH SPEAKING - Never call log_fact while user is still talking
-3. NEVER STACK QUESTIONS - Asking about unit AND role AND duration is FORBIDDEN
-4. NEVER SELF-ANSWER - Do NOT provide examples or continue after asking a question
-5. SILENCE IS GOOD - If user is silent, stay silent. Don't prompt them
-6. FOLLOW CURRENT OBJECTIVE PRECISELY - Do exactly what the phase instruction says
-
 ### YOUR CURRENT OBJECTIVE
 ${currentPhaseInstruction}
 
 ### WHEN YOU COMPLETE YOUR OBJECTIVE
-Say: "I have all the information I need for this section. Please click the 'Next Phase' button to continue."
-Then STOP and wait silently. Do not ask any further questions.
-
-### REMINDER: QUESTION FLOW
-Ask question → STOP → Wait → User answers → Log facts → Ask next question
-NEVER: Ask question and provide examples or continue talking
+Say: I have all the information I need for this section. Please click the 'Next Phase' button to continue.
 `;
 
   console.log(`🎯 AI Context: ONLY ${phaseController.currentPhase} phase (no future phase knowledge)`);

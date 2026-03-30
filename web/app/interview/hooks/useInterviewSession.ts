@@ -61,6 +61,7 @@ export function useInterviewSession({ onUnauthorized }: UseInterviewSessionOptio
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isAiSpeakingRef = useRef(false);
   const isSubmittingRef = useRef(false);
+  const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const playPcmAudio = useCallback((base64String: string) => {
     try {
@@ -94,14 +95,16 @@ export function useInterviewSession({ onUnauthorized }: UseInterviewSessionOptio
       nextStartTimeRef.current += buffer.duration;
       isAiSpeakingRef.current = true;
       setAiSpeaking(true);
-      source.onended = () => {
-        if (context.currentTime >= nextStartTimeRef.current - 0.1) {
-          setTimeout(() => {
-            isAiSpeakingRef.current = false;
-            setAiSpeaking(false);
-          }, 100);
-        }
-      };
+      
+      if (speakTimeoutRef.current) {
+        clearTimeout(speakTimeoutRef.current);
+      }
+      
+      const timeUntilEndMs = Math.max(0, (nextStartTimeRef.current - context.currentTime) * 1000);
+      speakTimeoutRef.current = setTimeout(() => {
+        isAiSpeakingRef.current = false;
+        setAiSpeaking(false);
+      }, timeUntilEndMs + 300);
     } catch (error) {
       console.error('Audio error', error);
     }
