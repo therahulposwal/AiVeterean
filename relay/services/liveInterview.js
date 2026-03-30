@@ -13,7 +13,7 @@ const { getSystemInstruction } = require('../config/interviewInstructions');
 const { STAGES, PHASE_ORDER } = require('../config/interviewStages');
 
 // --- CONFIG ---
-const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-12-2025';
+const MODEL_NAME = 'gemini-3.1-flash-live-preview';
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // --- TOOL DEFINITION ---

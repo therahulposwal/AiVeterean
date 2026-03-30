@@ -6,7 +6,7 @@ import { getAuthenticatedUserIdFromRequest } from '@/lib/auth';
 
 // Using Gemini 1.5 Flash or 2.0 Flash for speed and accuracy
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
 type BuildProfileBody = {
   userId?: string;
